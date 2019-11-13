@@ -1,0 +1,11 @@
+#!/bin/bash
+
+BASEDIR=$(dirname $(readlink -f ${0}))
+source "${BASEDIR}/common.sh"
+source "${BASEDIR}/git.sh"
+source "${BASEDIR}/github.sh"
+
+GIT_DEBUG=true
+git_branches "https://github.com/nicholasdille/ansible-k8s"
+
+github_branches nicholasdille ansible-k8s
