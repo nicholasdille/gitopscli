@@ -6,6 +6,7 @@ source "${BASEDIR}/git.sh"
 source "${BASEDIR}/github.sh"
 
 GIT_DEBUG=true
-git_branches "https://github.com/nicholasdille/ansible-k8s"
+git_branches "https://github.com/nicholasdille/gitopscli-test"
 
-github_branches nicholasdille ansible-k8s
+GITHUB_DEBUG=true
+github_branches nicholasdille gitopscli-test
