@@ -2,11 +2,57 @@
 
 BASEDIR=$(dirname $(readlink -f ${0}))
 source "${BASEDIR}/common.sh"
-source "${BASEDIR}/git.sh"
-source "${BASEDIR}/github.sh"
+source "${BASEDIR}/gitlab.sh"
+source "${BASEDIR}/rt.sh"
+source "${BASEDIR}/openssl.sh"
+source "${BASEDIR}/k8s.sh"
 
-GIT_DEBUG=true
-git_branches "https://github.com/nicholasdille/gitopscli-test"
+GOCLI_DIR=~/.gocli
 
-GITHUB_DEBUG=true
-github_branches nicholasdille gitopscli-test
+if [[ -f "${BASEDIR}/.env" ]]; then
+    source "${BASEDIR}/.env"
+fi
+
+if [[ ! -d "${GOCLI_DIR}/clusters" ]]; then
+    mkdir -p "${GOCLI_DIR}/clusters"
+    chmod 0700 "${GOCLI_DIR}/clusters"
+fi
+
+CLUSTERS=($(gitlab_branches "https://github.com/nicholasdille/gitopscli-test"))
+#>&2 echo "### Found ${#CLUSTERS[*]} clusters"
+
+declare -a WORKS
+for CLUSTER in ${CLUSTERS[*]}; do
+    #echo "### Cluster ${CLUSTER}"
+
+    if ! rt_get_artifact hmg-devinfra-generic/k8s/${CLUSTER}/kubeconfig.aes >"${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig.aes"; then
+        #echo "EEE Unable to download kubeconfig"
+        WORKS+=(false)
+        rm "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig.aes"
+        break
+    fi
+    #echo "III Found kubeconfig"
+
+    if ! cat "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig.aes" | openssl_decrypt >"${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig"; then
+        #echo "EEE Unable to decrypt kubeconfig"
+        WORKS+=(false)
+        rm "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig"
+        break
+    fi
+    #echo "III Decrypted kubeconfig"
+
+    if k8s_ping "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig"; then
+        #echo "III Accessible"
+        WORKS+=(true)
+    else
+        #echo "EEE Not accessible"
+        WORKS+=(false)
+    fi
+done
+
+(
+    echo "Name Available"
+    for INDEX in ${!CLUSTERS[*]}; do
+        echo "${CLUSTERS[$INDEX]} ${WORKS[$INDEX]}"
+    done
+) | column -t
