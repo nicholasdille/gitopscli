@@ -18,41 +18,54 @@ if [[ ! -d "${GOCLI_DIR}/clusters" ]]; then
     chmod 0700 "${GOCLI_DIR}/clusters"
 fi
 
-CLUSTERS=($(gitlab_branches "https://github.com/nicholasdille/gitopscli-test"))
+CLUSTER_DEFAULT_BRANCH=template
+CLUSTERS=($(gitlab_branches))
 #>&2 echo "### Found ${#CLUSTERS[*]} clusters"
 
 declare -a WORKS
-for CLUSTER in ${CLUSTERS[*]}; do
+declare -a DIFFS
+declare -a NODES
+#for CLUSTER in ${CLUSTERS[*]}; do
+for INDEX in ${!CLUSTERS[*]}; do
+    CLUSTER=${CLUSTERS[$INDEX]}
     #echo "### Cluster ${CLUSTER}"
+
+    DIFF=$(gitlab_branch_diff ${CLUSTER_DEFAULT_BRANCH} ${CLUSTER})
+    ADDS=$(echo "${DIFF}" | grep -E '^+' | wc -l)
+    REMOVES=$(echo "${DIFF}" | grep -E '^-' | wc -l)
+    DIFFS[$INDEX]="+${ADDS}-${REMOVES}"
 
     if ! rt_get_artifact hmg-devinfra-generic/k8s/${CLUSTER}/kubeconfig.aes >"${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig.aes"; then
         #echo "EEE Unable to download kubeconfig"
-        WORKS+=(false)
+        WORKS[$INDEX]="!download"
         rm "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig.aes"
-        break
+        continue
     fi
     #echo "III Found kubeconfig"
 
     if ! cat "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig.aes" | openssl_decrypt >"${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig"; then
         #echo "EEE Unable to decrypt kubeconfig"
-        WORKS+=(false)
+        WORKS[$INDEX]="!decrypt"
         rm "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig"
-        break
+        continue
     fi
     #echo "III Decrypted kubeconfig"
 
     if k8s_ping "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig"; then
         #echo "III Accessible"
-        WORKS+=(true)
+        WORKS[$INDEX]="Ok"
     else
         #echo "EEE Not accessible"
-        WORKS+=(false)
+        WORKS[$INDEX]="!available"
+        continue
     fi
+
+    NODES[$INDEX]="$(k8s_count_nodes "${GOCLI_DIR}/clusters/${CLUSTER}_kubeconfig")"
 done
 
 (
-    echo "Name Available"
+    echo "Name Changes Available Nodes"
     for INDEX in ${!CLUSTERS[*]}; do
-        echo "${CLUSTERS[$INDEX]} ${WORKS[$INDEX]}"
+        echo "${CLUSTERS[$INDEX]} ${DIFFS[$INDEX]} ${WORKS[$INDEX]} ${NODES[$INDEX]}"
     done
 ) | column -t
