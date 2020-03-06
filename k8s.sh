@@ -19,3 +19,8 @@ k8s_count_nodes() {
     local kubeconfig=$1
     k8s_get_nodes ${kubeconfig} "-o json" | jq '.items | length'
 }
+
+k8s_get_namespaces() {
+    local kubeconfig=$1
+    kubectl --kubeconfig=${kubeconfig} get namespaces -o json | jq --raw-output '.items[].metadata.name'
+}
